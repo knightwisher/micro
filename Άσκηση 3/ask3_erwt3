@@ -1,0 +1,96 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+int patima = 0; // patima=1 starts the fan, 2 changes the duty cycle, 3 fan off
+int num_of_edge = 0; // gia ypologismo artiwn palmwn
+
+int main(void) {
+	// lepides k vasi
+	PORTD.DIR |= PIN0_bm; // lepides
+	PORTD.DIR |= PIN1_bm; // vasi
+
+	PORTD.OUT |= PIN0_bm; // Pin0=0 lepides off
+	PORTD.OUT |= PIN1_bm; // Pin1=0 vasi off
+
+	// switch5 = diakoptis anemistira
+	PORTF.PIN5CTRL |= PORT_PULLUPEN_bm | PORT_ISC_BOTHEDGES_gc;
+
+	sei();
+
+	while (patima == 0) { // while loop tou switch, perimenoume na ginei interrupt portf
+		;
+	}
+
+	while (patima == 1) { // meta apo portf interrupt o anemistiras energop
+		;
+	}
+}
+
+ISR(PORTF_PORT_vect) { // ISR for switch
+	cli();
+	patima++;
+	int y = PORTF.INTFLAGS; // clear interrupt flag
+	PORTF.INTFLAGS = y;     // clear interrupt flag
+
+	switch (patima) {
+		case 1: // prwti for a, anemistiras apla on
+		{
+			TCA0.SPLIT.CTRLD = 1; // split mode on
+			TCA0.SPLIT.CTRLA = TCA_SPLIT_CLKSEL_DIV1024_gc; // prescaler=1024
+
+			TCA0.SPLIT.LPER = 40; // to resolution tis vasis lower bits
+			TCA0.SPLIT.LCMP0 = 24; // duty cycle vasis(60%) lower bits
+			TCA0.SPLIT.HPER = 20; // resolution ton lepidon higher bits
+			TCA0.SPLIT.HCMP0 = 10; // duty cycle lepidon (50%) higher bits
+
+
+			//select Single_Slope_PWM
+			TCA0.SINGLE.CTRLB=TCA_SINGLE_WGMODE_SINGLESLOPE_gc;
+			//enable interrupt Overflow
+			TCA0.SINGLE.INTCTRL = TCA_SINGLE_OVF_bm;
+			// enable HUNF n LUNF interrupt
+			TCA0.SPLIT.INTCTRL |= TCA_SPLIT_HUNF_bm | TCA_SPLIT_LUNF_bm;
+		}
+		break;
+		
+		case 2:
+		{
+			;
+		}
+
+		case 3: // anemistiras off
+		{
+			TCA0.SPLIT.CTRLD = 0; // split mode off
+
+			PORTD.OUT |= PIN0_bm; // LED0 off, βάση δεν γυρνάει
+			PORTD.OUT |= PIN1_bm; // LED1 off, λεπίδες δεν γυρνάνε
+
+			patima = 0; // pisw stin periptwsi 0 pou den ehei patithei to koympi
+		}
+		break;
+	}
+}
+
+ISR(TCA0_HUNF_vect) { // HUNF interrupt, vasi
+	
+	if ((TCA0.SPLIT.INTFLAGS & 0b00000010)==2){
+		num_of_edge++;
+		if (num_of_edge % 2 == 1) {
+			PORTD.OUTCLR = PIN0_bm; // LED0 on, vasi girnaei
+			} else {
+			PORTD.OUT |= PIN0_bm; // LED0 off, vasi de girnaei
+		}
+	}
+	
+	if ((TCA0.SPLIT.INTFLAGS & 0b00000001)==1){
+		if (num_of_edge % 2 != 1) {
+			PORTD.OUTCLR = PIN1_bm; // LED1 on, lepides girnane
+			} else {
+			PORTD.OUT |= PIN1_bm; // LED1 off, lepides den girnane
+		}
+	}
+	int intflags = TCA0.SPLIT.INTFLAGS; // clear flag
+	TCA0.SPLIT.INTFLAGS = intflags; // clear flag
+}
+ 
+
