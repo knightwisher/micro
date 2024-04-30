@@ -1,0 +1,52 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+
+
+int lower_thres = 10;
+int higher_thres = 20;
+
+
+int main(){
+	PORTD.DIR |= PIN0_bm; //ygrasia hamili i endiksi lathous tautohrona me LED1, LED2
+	PORTD.DIR |= PIN1_bm; //ygrasia ipsili i endiksi lathous tautohrona me LED0, LED2
+	PORTD.DIR |= PIN2_bm; //systima aerismou i endiksi lathous tautohrona me LED0, LED1
+	
+	PORTD.OUT |=PIN0_bm; //pin0 off
+	PORTD.OUT |=PIN1_bm; //pin1 off
+	PORTD.OUT |=PIN2_bm; //pin2 off
+
+	//energopoiisi metatropea ADC (aisthitiras ygrasias)
+	ADC0.CTRLA |= ADC_RESSEL_10BIT_gc;//10-bit resolution
+	ADC0.CTRLA |= ADC_FREERUN_bm; //Free-Running mode enabled
+	ADC0.CTRLA |= ADC_ENABLE_bm; //Enable ADC
+	ADC0.MUXPOS |= ADC_MUXPOS_AIN7_gc;//to psifio pou syndeetai me ton ADC
+	ADC0.DBGCTRL |= ADC_DBGRUN_bm; //Enable Debug Mode gia na mi stamataei pote na trehei o ADC
+	
+	//Litourgia Sygkrisis (Window Comparator Mode)
+	ADC0.WINLT |= 10; //Set min threshold 
+	ADC0.WINHT |= 20; //Set max threshold 
+	ADC0.INTCTRL |= ADC_WCMP_bm; //Enable Interrupts for WCM
+	ADC0.CTRLE |= 0b00000100; //Interrupt when RESULT < WINLT or RESULT >WINHT
+	sei();
+	ADC0.COMMAND |= ADC_STCONV_bm; //Start Conversion, oi times tou convertion katagrafontai ston reg RES
+	while(1){
+		;
+	}
+}
+
+
+ISR(ADC0_WCOMP_vect){  //timi tou ADC panw apo max_threashlod i katw apo min_threashold
+	cli();
+	int intflags = ADC0.INTFLAGS; //clears INTFLAGS
+	ADC0.INTFLAGS = intflags; //clears INTFLAGS
+	
+	if(ADC0.RES<lower_thres){//an interrupt logo RES<WINLT
+		PORTD.OUTCLR = PIN0_bm; //PIN0 is on -> theloun potisma
+	}
+	
+	if(ADC0.RES>higher_thres){//an interrupt logo RES>WINHT
+		PORTD.OUTCLR = PIN1_bm; //PIN1 is on -> theloun aerismo
+	}
+	
+}
